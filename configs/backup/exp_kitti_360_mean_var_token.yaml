@@ -1,0 +1,34 @@
+defaults:                       ### This code is to run for slurm config
+    - exp_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "MeanVarToken"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+
+resume_from: null
+# new_model_architecture: true
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead"
+          name: "multiviewhead"
+          freeze: false
+          args:
+            embedding_encoder:
+                type: "pwf"
+                d_out: 32
+            independent_token:
+                type: "DataViewIndependentToken"
+                args: None
+            attn_layers:
+                IBRAttn: False
+                n_layers: 3
+                n_heads: 4
+                readout_token:
+                    type: "fixed"  # fixed, data, neuray
+            probing_layer:
+
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true

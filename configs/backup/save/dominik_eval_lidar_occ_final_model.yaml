@@ -1,0 +1,52 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_eval_lidar_occ_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+# name: "BaseExperimentFeatureFusion" 
+name: "svhead_final_model" 
+
+## loading the corresponding model
+# checkpoint: "/storage/user/muhled/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLarge_backend-None-1_20231107-105543/training_checkpoint_200000.pt"
+checkpoint: "/storage/user/muhled/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLargeKnowDist_backend-None-1_20231112-111722/training_checkpoint_190000.pt"
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: true
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+
+            
+        ## This is for KDBTS. Please comment bellow them out when not used.
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+
+    final_prediction_head: "singleviewhead"     ## default: multiviewhead3 | singleviewhead
+    # encoder_ids: [0, 1, 2, 3]   ## two-possible settings: 1. [0] mono, 2. [0, 1, 2, 3] stereo-temporal
+    # encoder_ids: [0, 2]   ## stereo
+    # encoder_ids: [0, 1]   ## Mono temporal
+    encoder_ids: [0]   ## single view
+
+    # viz purpose: set empty for non-saving bin files
+    save_bin_path: 
+    # default "/storage/user/hank/methods_test/semantic-kitti-api/bts_test/mvbts/sequences/00/voxels"                       

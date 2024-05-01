@@ -1,0 +1,29 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_eval_lidar_occ_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "BaseExperimentAttnLayers" 
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 256
+            mlp2:
+                type: "resnet"
+                d_in: 32
+                args:
+                    n_blocks: 0
+                    d_hidden: 32
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+    final_prediction_head: multiviewhead3

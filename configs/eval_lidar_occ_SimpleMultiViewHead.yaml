@@ -1,0 +1,103 @@
+defaults:       ## Note: Make sure the configuration is the same with the one from the training set up as it evaluates the occupancy from the checkpoint trained before.
+    - default
+    - data: kitti_360
+    - _self_
+
+name: "eval_lidar_SimpleMultiViewHead"
+model: "bts_lidar"
+
+# checkpoint: "/usr/wiss/xxxxxd/storage/user/outputs/mvbts/kitti-360/simple_multi_view_head_backend-None-1_20231027-110726/training_checkpoint_220000.pt" 
+checkpoint: "out/kitti_360/mvbts/simple_multi_view_head_backend/training_checkpoint_220000.pt"
+output_path: "outputs/mvbts/kitti-360"
+
+log_every: 10
+batch_size: 8
+num_workers: 1
+
+
+data:
+    image_size: [192, 640]
+    data_3d_bboxes: false
+    data_segmentation: false
+    data_fisheye: true                  # default: false
+    data_stereo: true                   # default: false
+    data_fc: 2                          # default: 1. 2 => gives 8 views with 2 time stamps
+    is_preprocessed: false
+
+renderer:
+    n_coarse : 64                       # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 32768 
+
+model_conf:
+    arch: "MVBTSNet"                     # Set "IBRNet" for baseline comparison. !Note!: this should be the same architecture with the architecture trained with checkpt to eval. constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 4           
+    sample_color: true
+    use_viewdirs: false                  # use with Neuray to aggregate multi-views, set true. c.f. IBRNet, PixelNeRF
+    # loss_from_single_img: false # default: false
+    encoder:
+        type: "monodepth2"
+        freeze: false                    # freezing encoder to train the transformer
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64                        # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    decoder_heads:
+        - type: "SimpleMultiViewHead"
+          name: "simplemultiviewhead"
+          freeze: false
+          args:
+            mlp:
+                type : "resnet"
+                args:
+                    n_blocks : 0
+                    d_hidden : 64
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+    final_prediction_head: "simplemultiviewhead"
+
+
+    encoding_style: "stereo"                  # random | default | stereo : execlusively load stereo for input features map. Note: Current kitti-360 fisheye's intrinsic is poorly setup, better to turn it false to stop detrimental result for density field reconstruction. random: randomly sampling feature maps during training fisheye during training. BTS uses only mono as sampling. default: encoding indices include num multiview in order.
+    
+    ## camera will evaluate the possible cases up until the defined indices.
+    encoder_ids: [0]                          # mono case
+    # encoder_ids: [0, 2]                     # temporal mono case
+    # encoder_ids: [0, 1]                     # stereo  case
+    # encoder_ids: [0, 1, 2, 3]               # stereo temporal case
+    # encoder_ids: [0, 1, 2, 3, 4, 5, 6, 7]   # full case
+    # ids_enc_offset_viz: false               # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or set "false" if you want to sample randomly (c.f. fisheye_offset)
+
+    z_near: 3
+    z_far: 80                           # default: 80m
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                  # num frame to render among v==8
+    frame_sample_mode: kitti360-mono
+
+    sample_mode: patch                  # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                       # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true             # data augmentation
+
+    learn_empty: false
+    code_mode: z
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1

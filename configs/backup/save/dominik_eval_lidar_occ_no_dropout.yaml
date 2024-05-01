@@ -1,0 +1,25 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_eval_lidar_occ_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "BaseExperimentNoDropout" 
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead2"
+          name: "multiviewhead2"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 64
+            attn_layers: null
+            independent_token: null
+            mlp2: null
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false

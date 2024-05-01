@@ -1,0 +1,49 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+validate_every: 200000
+## For training
+name: "BaseExperimentNoFisheyeFeatureFusionLargeKnowDist" 
+
+resume_from: "/storage/user/muhled/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLargeKnowDist_backend-None-1_20231111-124921/training_checkpoint_50000.pt"
+new_model_architecture: true
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+    final_prediction_head: multiviewhead3
+    encoding_style: "stereo" 
+
+loss:
+    criterion: "l1+ssim"                # option: "l1+ssim+geo+cls"
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 0.001 # default: 0.001
+    lambda_pseudo_ground_truth: 1e-2
+    pseudo_ground_truth_teacher: "multiviewhead3"
+    pseudo_ground_truth_students:
+        - "singleviewhead"

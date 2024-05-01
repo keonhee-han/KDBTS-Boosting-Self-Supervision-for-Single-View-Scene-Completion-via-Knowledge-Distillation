@@ -1,0 +1,127 @@
+defaults:                       
+    - default
+    - data: kitti_360
+    - _self_
+
+## For training
+# name: "BaseExperimentFeatureFusion" 
+name: "kdbts_occ_eval" 
+
+model: "bts_lidar"
+
+## loading best model
+# mvbts
+# checkpoint: "/usr/wiss/xxxxxd/storage/user/outputs/mvbts/kitti-360/simple_multi_view_head_backend-None-1_20231027-110726/training_checkpoint_220000.pt" 
+# checkpoint: "out/kitti_360/mvbts/simple_multi_view_head_backend/training_checkpoint_220000.pt"
+# checkpoint: "/storage/user/xxxxxd/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLarge_backend-None-1_20231107-105543/training_checkpoint_200000.pt"
+# checkpoint: "out/kitti_360/mvbts/NoFisheyeFeatureFusionLarge/training_checkpoint_200000.pt"
+# kdbts
+# checkpoint: "/storage/user/xxxxxd/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLargeKnowDistResume_backend-None-1_20231111-131526/training_checkpoint_220000.pt"
+# checkpoint: "/storage/user/xxxxxd/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLargeKnowDist_backend-None-1_20231112-111722/training_checkpoint_190000.pt"
+# checkpoint: "out/kitti_360/kdbts/NoFisheyeFeatureFusionLarge/training_checkpoint_220000.pt"
+
+log_every: 10
+batch_size: 8
+num_workers: 1
+
+
+data:
+    image_size: [192, 640]
+    data_3d_bboxes: false
+    data_segmentation: false
+    data_fisheye: true          ## default: false
+    data_stereo: true           ## default: false
+    data_fc: 2                  ## default: 1. 2 => gives 8 views with 2 time stamps
+    is_preprocessed: false
+
+renderer:
+    n_coarse : 64                       # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 65536 # ==2^15       ## ~/2 /2 /2    ## Note: this is the absolute eval steps without having to worry about the variant evaluations caused by batch epoch
+model_conf:
+    arch: "MVBTSNet"            # !Note!: this should be the same architecture with the architecture trained with checkpt to eval. constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 4           
+    sample_color: true
+    use_viewdirs: false                  # use with Neuray to aggregate multi-views, set true. c.f. IBRNet, PixelNeRF
+    # loss_from_single_img: false # default: false
+    encoder:
+        type: "monodepth2"
+        freeze: false           # freezing encoder to train the transformer
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64               # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+    decoder_heads:
+        - type: "MultiViewHead3"    # "MultiViewHead2" for KDBTS small MLP  | "SimpleMultiViewHead"
+          name: "multiviewhead3"    # "multiviewhead2"  | "simplemultiviewhead"
+          freeze: true
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+            
+        ## This is for KDBTS. Please comment bellow them out when not used.
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+
+    ## Final prediction head is set to "singleviewhead" for KDBTS, and "multiviewhead3" for MVBTS.
+    final_prediction_head: "multiviewhead3"     ## default: "multiviewhead3" : MVBTS | "singleviewhead" : KDBTS | "multiviewhead2" : small MLP | "simplemultiviewhead" for simple_multi_view_head_backend
+    
+    # ids_enc_offset_viz: false               # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or set "false" if you want to sample randomly (c.f. fisheye_offset)
+    # ids_enc_offset_viz: [0, 1, 2, 3, 4, 5, 6, 7]   # full case
+    ids_enc_offset_viz: [0, 2, 4, 6]     ## stereo fisheyes
+    # ids_enc_offset_viz: [0, 1, 2, 3]     ## stereo-temporal
+    # ids_enc_offset_viz: [0, 2]           ## stereo
+    # ids_enc_offset_viz: [0, 1]           ## Mono temporal
+    # ids_enc_offset_viz: [0]                ## single view (mono)
+
+    ## viz purpose: set empty for non-saving bin files
+    save_bin_path: ""   ## e.g. "/semantic-kitti-api/bts_test/mvbts/sequences/00/voxels"                       
+    ## Following configs are for setting for gen_vid_seq.py
+    z_near: 3
+    z_far: 80                           # default: 80m
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                  # num frame to render among v==8
+    frame_sample_mode: kitti360-mono
+
+    sample_mode: patch                  # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                       # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true             # data augmentation
+
+    learn_empty: false
+    code_mode: z
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1

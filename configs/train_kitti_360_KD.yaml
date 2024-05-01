@@ -1,0 +1,53 @@
+defaults:                       ### This code is to train the single-view model with knowledge-distillation from the existing pretrained KDBTS pretraiend model
+    - train_kitti_360_base
+    - _self_
+
+## For training
+name: "BaseExperimentNoFisheyeFeatureFusionLargeKnowDist" 
+
+output_path: "outputs/kdbts/kitti-360"
+
+validate_every: 200000
+
+## Resume training for the last checkpoint of finished MVBTS training, so that KDBTS can be trained.
+# resume_from: "out/kitti_360/svbts/BaseExperimentNoFisheyeFeatureFusionLarge/training_checkpoint_220000.pt"
+# resume_from: "out/kitti_360/mvbts/NoFisheyeFeatureFusionLarge/training_checkpoint_200000.pt"
+resume_from: "out/kitti_360/kdbts/training_checkpoint_250000.pt"
+new_model_architecture: true
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128       # 256 for large MLP
+            mlp2:
+                type: "resnet"
+                d_in: 16                # 32 for large MLP
+                args:
+                    n_blocks: 0
+                    d_hidden: 16        # 32 for large MLP
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+    final_prediction_head: "singleviewhead"     ## default: "multiviewhead3" : MVBTS | "singleviewhead" : KDBTS | "multiviewhead2" : small MLP | "simplemultiviewhead" for simple_multi_view_head_backend
+    encoding_style: "stereo" 
+
+loss:
+    criterion: "l1+ssim"                
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 0.001 
+    lambda_pseudo_ground_truth: 1e-2
+    pseudo_ground_truth_teacher: "multiviewhead3"
+    pseudo_ground_truth_students:
+        - "singleviewhead"

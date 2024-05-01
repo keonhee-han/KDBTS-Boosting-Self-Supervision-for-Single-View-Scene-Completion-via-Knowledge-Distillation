@@ -1,0 +1,106 @@
+defaults:
+    - default
+    - data: kitti_raw
+    - _self_
+
+name: "eval_depth"
+model: "bts_depth"
+
+## Loading pretrained to evaluate 
+# kdbts
+checkpoint: "out/kitti_raw/kdbts/training_checkpoint_220000.pt"
+# mvbts
+# checkpoint: "out/kitti_raw/mvbts/training_checkpoint_200000.pt"
+
+## histogram visualization. Please comment out if you don't need it.
+# hist_viz:                                   
+#     num_bins: 416
+
+log_every: 10
+batch_size: 1
+
+data:
+    image_size: [192, 640]
+    data_stereo: true
+    data_fc: 2
+
+model_conf:
+    arch: "MVBTSNet"                        # constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 3         
+    use_viewdirs: false                     # to aggregate multi-views, set true. c.f. IBRNet
+
+    encoder:
+        type: "monodepth2"
+        freeze: false                       # freezing encoder to train the transformer
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64                           # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0                  # which encoder id we want to extract among feature maps
+            d_hidden : 64
+    final_prediction_head: "singleviewhead" # "multiviewhead3"
+
+    encoding_style: "random"                # sampling fisheye during training. BTS uses only mono as sampling. default: false
+    # ids_enc_offset_viz: [0, 1, 2, 3, 4, 5, 6, 7]   # full case
+    # ids_enc_offset_viz: [0, 1, 2, 3]     ## stereo-temporal
+    # ids_enc_offset_viz: [0, 2]           ## stereo
+    # ids_enc_offset_viz: [0, 1]           ## Mono temporal
+    ids_enc_offset_viz: [0]                ## single view (mono)
+
+    z_near: 3
+    z_far: 80                               # default: 80m
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                      
+    frame_sample_mode: default
+
+    sample_mode: patch                      # Explanation: e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                           # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                    # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true                 # data augmentation
+
+    learn_empty: false
+    code_mode: z
+
+renderer:
+    n_coarse : 64                           # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 65536

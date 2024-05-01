@@ -1,0 +1,34 @@
+defaults:                       ### This code is to run for slurm config
+    - exp_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "simple_multi_view_head"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+resume_from: "/storage/user/hank/BehindTheScenes/out/kitti_360/pretrained/training-checkpoint.pt"
+new_model_architecture: false
+num_epochs: 50
+
+model_conf:
+    encoder:
+        type: "monodepth2"
+        freeze: true                   # freezing en- and decoder network to verify if training the transformer works     // by unfreezing, to train the en- and decoder
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64  
+
+    decoder_heads:
+        - type: "SimpleMultiViewHead"
+          name: "simplemultiviewhead"
+          freeze: false
+          args:
+            mlp:
+                type : "resnet"
+                args:
+                    n_blocks : 0
+                    d_hidden : 64
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+    final_prediction_head: "simplemultiviewhead"

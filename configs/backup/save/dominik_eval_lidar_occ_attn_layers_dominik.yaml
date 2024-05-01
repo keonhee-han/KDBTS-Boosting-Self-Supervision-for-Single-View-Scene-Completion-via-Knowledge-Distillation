@@ -1,0 +1,56 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_eval_lidar_occ_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+# name: "BaseExperimentFeatureFusion" 
+name: "Stereo_temporal_Attn_layers" 
+
+## loading the corresponding model
+checkpoint: "/storage/user/muhled/outputs/mvbts/kitti-360/BaseExperimentAttnLayerToken_backend-None-1_20231108-125748/training_checkpoint_200000.pt"
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead2"
+          name: "multiviewhead2"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            attn_layers: 
+                IBRAttn: true
+                n_layers: 1
+                n_heads: 4
+            independent_token:
+                type: "FixedViewIndependentToken"
+                args: None
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.0
+            dropout_multiviewhead: false
+            
+        ## This is for KDBTS. Please comment bellow them out when not used.
+        # - type: "resnet"
+        #   name: "singleviewhead"
+        #   args:
+        #     n_blocks : 0
+        #     view_number: 0              # which encoder id we want to extract among feature maps
+        #     d_hidden : 64
+
+    final_prediction_head: "multiviewhead2"     ## default: multiviewhead3 | singleviewhead
+    # encoder_ids: [0, 1, 2, 3]   ## two-possible settings: 1. [0] mono, 2. [0, 1, 2, 3] stereo-temporal
+    encoder_ids: [0, 2]   ## stereo
+    # encoder_ids: [0, 1]   ## Mono temporal
+
+    # viz purpose: set empty for non-saving bin files
+    save_bin_path: 
+    # default "/storage/user/hank/methods_test/semantic-kitti-api/bts_test/mvbts/sequences/00/voxels"                       

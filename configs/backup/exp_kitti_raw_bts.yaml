@@ -1,0 +1,119 @@
+defaults:                       ### For viz purpose for original BTS model to compare MVBTS
+    - default
+    - data: kitti_raw_bts
+    - _self_
+
+name: "base_debug"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+model: "bts"                    # model: "bts"/ "bts_overfit"    # TODO: bts_~~ for debug ## need to modify for debugging for different bts model ## replace en-decoder for trained one
+# output_path: "out/svbts/viz/kitti_360/"   
+output_path: "out/mvbts/viz/kitti-raw"
+
+
+num_epochs: 25                  ## Note: since the model runs from the BTS checkpoint whose epoch starts with 24, epoch should be greater than 24
+validate_every: 2
+visualize_every: 1         # default: 10       ## bigger is good for computational reduction
+batch_size: 1                  # default: 16       ## Note: size 1 is working properly with NueRay integration. The complete integration needs to be done with super-batch size in training loop. ## each batch contains 8 views 16*8 too much
+
+save_best:
+    metric: abs_rel             # The model that has the smallest absolute relative error will be saved.
+    sign: -1                    # The sign is negative, meaning that the model with the smallest abs_rel is the best
+
+# resume_from: "/home/wiss/muhled/Documents/supervision/Keonhee/MVBTS/out/kitti_360/pretrained/training-checkpoint.pt"
+## For kitti-360
+# resume_from: "/storage/user/hank/BehindTheScenes/out/kitti_360/pretrained/training-checkpoint.pt"
+## For kitti-raw
+resume_from: "/storage/user/hank/BehindTheScenes/out/kitti_raw/pretrained/training-checkpoint.pt"
+
+data:
+    data_fc: 2
+    image_size: [192, 640]
+    color_aug: true
+    is_preprocessed: true
+    fisheye_rotation: [0, -15]
+
+#### below are the same for both eval and training
+
+renderer:
+    n_coarse : 64                       # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 32768 # ==2^15       ## ~/2 /2 /2    ## Note: this is the absolute eval steps without having to worry about the variant evaluations caused by batch epoch
+
+model_conf:
+    arch: "BTSNet"
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 2           # TODO: Check L_{loss} and L_{render} which neither of them works. number of multi views to aggregate. Possible value ~8. Default: 2 Note: cams are render loss
+    use_viewdirs: true  
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    encoder:
+        type: "monodepth2"
+        freeze: false
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64
+
+    mlp_coarse:
+        type : "resnet" ## please comment them for running trainer in models_bts.py
+        n_blocks : 0
+        d_hidden : 64
+
+    mlp_fine:
+        type : "empty"
+        n_blocks : 1
+        d_hidden : 128
+    
+    fisheye_encoding: true      # sampling fisheye during training. BTS uses only mono as sampling. default: false
+    ids_enc_offset_viz: [0]     # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or None if you want to sample randomly (c.f. fisheye_offset)
+
+    z_near: 3                           # default: 3(m)
+    z_far: 80                           # default: 80(m)
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                  # num frame to render among given cameras at a frame: 4 x 2 => v==8
+    frame_sample_mode: default          # defaut: default (for kitti-raw) | kitti360-mono | mono | stereo | only (for single image without temporal steps). Note: Make sure data_fisheye, data_stereo is set up accordingly.
+
+    sample_mode: patch                  # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                       # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+
+    flip_augmentation: true
+
+    learn_empty: false
+    code_mode: z                        # default: z, z | distance | z_feat: additional cam_feature_map_positional_encoding, Note: z_feat is unverified
+
+loss:
+    criterion: "l1+ssim"                # photometric reconstruction loss
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 1e-3  # default: 1e-3 == 0.001
+    lambda_pseudo_ground_truth: 0       # default: 1e-4, set 0 to disable. Note: This should be trained once the multiview head is trained enough to knowledge distillation for singleview head
+    pseudo_ground_truth_teacher: "multiviewhead"
+    pseudo_ground_truth_students:
+        - "singleviewhead"              ## making list type with an string element contained
+
+learning_rate: 5e-5                     # default: 1e-5 for fine-tuning. Note: 1e-4 for original BTS training from scratch, and last 20% is trained with 1e-5 c.f. BTS paper
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1
+
+## For distributed training
+#backend = "nccl"  # Or "gloo"
+#nproc_per_node: 2
+
+IDE_debug:                              ## set true for remote IDE debug for pydevd_pycharm
+    sv_: 58
+    port_: 58023

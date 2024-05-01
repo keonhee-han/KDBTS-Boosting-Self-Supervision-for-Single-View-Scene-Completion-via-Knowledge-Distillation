@@ -1,0 +1,9 @@
+defaults:                       ### This code is to run for slurm config
+    - exp_kitti_360_base
+    - _self_
+
+name: "FrozenBackbone"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+
+model_conf:
+    encoder:
+        freeze: true  

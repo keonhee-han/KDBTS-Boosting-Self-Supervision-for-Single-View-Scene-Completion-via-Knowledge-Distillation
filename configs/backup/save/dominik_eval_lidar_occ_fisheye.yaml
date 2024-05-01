@@ -1,0 +1,11 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_eval_lidar_occ_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "BaseExperimentWithFisheye" 
+
+model_conf:
+    encoding_style: "random" 

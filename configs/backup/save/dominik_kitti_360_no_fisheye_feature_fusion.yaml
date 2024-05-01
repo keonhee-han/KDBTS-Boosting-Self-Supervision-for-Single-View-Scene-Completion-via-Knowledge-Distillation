@@ -1,0 +1,30 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "BaseExperimentNoFisheyeFeatureFusionLarge" 
+
+model_conf:
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+    final_prediction_head: multiviewhead3
+    encoding_style: "stereo" 

@@ -1,0 +1,106 @@
+defaults:       ## Note: Make sure the configuration is the same with the one from the training set up as it evaluates the occupancy from the checkpoint trained before.
+    - default
+    - data: kitti_360_DFT
+    - _self_
+
+name: "eval_lidar_occ"
+model: "bts_lidar"
+#checkpoint: "out/kitti_360/enc0_chkpt_unfr_lr1e-6_BTS_DFT_nry_backend-None-1_20230824-232011/"  ## change whenever you want to evaluate the model
+# checkpoint: "out/kitti_360/att32_nmv5_lay3_enc0_Unfr_Lr5e_5_BTS_Nry_backend-None-1_20230830-022311"  ## change whenever you want to evaluate the model
+checkpoint: "/usr/stud/hank/storage/user/BehindTheScenes/out/mvbts/kitti_360/BaseExperiment_debug_backend-None-1_20230919-173035"  ## change whenever you want to evaluate the model
+# /usr/stud/hank/storage/user/BehindTheScenes/out/kitti_360/BTS_DFT_nry_frozen_enc01_backend-None-1_20230822-182806/training_checkpoint_174000.pt
+# /usr/stud/hank/storage/user/BehindTheScenes/out/kitti_360/att32_nmv5_lay3_enc0_Unfr_Lr5e_5_BTS_Nry_backend-None-1_20230830-022311/training_checkpoint_324500.pt
+
+log_every: 10
+batch_size: 4
+num_workers: 1
+
+
+data:
+    image_size: [192, 640]
+    data_3d_bboxes: false
+    data_segmentation: false
+    data_fisheye: true          ## default: false
+    data_stereo: true           ## default: false
+    data_fc: 2                  ## default: 1. 2 => gives 8 views with 2 time stamps
+    is_preprocessed: false
+
+model_conf:
+    arch: "MVBTSNet"            # constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 5           # TODO: Check L_{loss} and L_{render} which neither of them works. number of multi views to aggregate. Possible value ~8. Default: 2 Note: cams are render loss
+    DFT: true                   # set true for enabling DFT model
+    feature_pad: true
+    dropout_views_rate: 0.1     # 0==turn off: let model to learn robustness by dropping out sampled_features randomly
+    num_layers: 2               # num of encoder layers, GeoNeRF 4: default: 3 maximum complexity with 48GB
+    nhead: 4                    # set transformer's encoder's num heads for both DFT and NeuRay model
+    d_model: 103                # num channels for each token from the feature. It could be adjustable unless it's prime number          ## complexity analysis (maybe to be done in linear for efficiency)
+    att_feat: 16               # default: 64, number of dim of embedding FFlayer (to reduce the dim of feature embedding and make divisible by num of heads)
+    embed_encoding: "ff"       # set embedding type as string: pwf | ff | hpwf : PoswiseFF_emb4enc | FeedForward | hardcoded_PoswiseFF_emb4enc . Note: shrink the size of sequence of dimension of token (for model's complexity reason)
+    DFEnlayer: true             # To choose the model uses whether built-in Pytorch library or code implementation      (Density Field Transformer Encoder layer)
+    fisheye_encoding: true      # sampling fisheye during training. BTS uses only mono as sampling. default: false
+    AE: false                   # GeoNeRF's AutoEncoder for view-independent tokens (ablation)
+    NeuRay: true
+    use_viewdirs: true          # to aggregate multi-views, set true. c.f. IBRNet
+    ids_enc_offset_viz: None    # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or None if you want to sample randomly (c.f. fisheye_offset)
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    encoder:
+        type: "monodepth2"
+        freeze: true            # freezing encoder to train the transformer
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64               # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    mlp_coarse:
+        type : "resnet"
+        n_blocks : 0
+        d_hidden : 64
+
+    mlp_fine:
+        type : "empty"
+        n_blocks : 1
+        d_hidden : 128
+
+    z_near: 3
+    z_far: 80                           # default: 80m
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2
+    frame_sample_mode: kitti360-mono
+
+    sample_mode: patch                  # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                       # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true             # data augmentation
+
+    learn_empty: false
+    code_mode: z
+
+loss:
+    criterion: "l1+ssim"                # option: "l1+ssim+geo+cls"
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 0.001 # default: 0.001
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1
+
+renderer:
+    n_coarse : 64                       # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 32768 # ==2^15       ## ~/2 /2 /2    ## Note: this is the absolute eval steps without having to worry about the variant evaluations caused by batch epoch

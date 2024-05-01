@@ -1,0 +1,111 @@
+defaults:
+    - default
+    - data: kitti_360_DFT           ## For evaluating kitti360 | kittiraw, set kitti_360_DFT | kitti_raw
+    - _self_
+
+name: "eval_depth_MVBTS"
+model: "bts_depth"
+
+# checkpoint: "out/kitti_raw/pretrained"
+
+## pretrained KDBTS (knowlege distillation) (Note: make same configuration from checkpoint)
+# checkpoint: "/usr/stud/hank/storage/user/BehindTheScenes/out/mvbts/kitti_360/__Ablation_embdim16_slurm_backend-None-1_20231019-175322/training_checkpoint_326000.pt"
+
+## pretrained DFT
+# checkpoint: "/storage/user/muhled/outputs/mvbts/kitti_360/long_training/training_checkpoint_310000.pt"
+# checkpoint: "/storage/user/muhled/outputs/mvbts/kitti_360/long_training_random_offset/training_checkpoint_303500.pt"
+
+## pretrained KD-DFT
+# checkpoint: "/storage/user/hank/BehindTheScenes/out/mvbts/kitti_360/__KD_tempOffsetFeStereo_backend-None-1_20231109-170053/training_checkpoint_400000.pt"
+checkpoint: "/storage/user/hank/BehindTheScenes/out/mvbts/kitti_360/__KD_tempOffsetFeStereo_backend-None-1_20231112-203616/training_checkpoint_320000.pt"
+
+# checkpoint: "/storage/user/hank/BehindTheScenes/out/mvbts/pretrained/KDDFT/training_checkpoint_400000.pt"
+
+log_every: 10
+batch_size: 1
+
+data:
+    image_size: [192, 640]
+    data_fc: 1
+
+model_conf:
+    arch: "MVBTSNet"
+    use_code: true
+    use_scales: true
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    encoder:
+        type: "monodepth2"
+        freeze: false
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64
+
+    decoder_heads:
+        - type: "MultiViewHead"
+          name: "multiviewhead"
+          freeze: false                 # True For knowledge-distillation learning for singleview head
+          args:
+            embedding_encoder:
+                type: "pwf"              ## set embedding type as string: pwf | ff | hpwf : PoswiseFF_emb4enc | FeedForward | FeedForward_half| hardcoded_PoswiseFF_emb4enc . Note: shrink the size of sequence of dimension of token (for model's complexity reason)
+                d_out: 32               ## input dimension of encoder layer of Transformer
+            independent_token:
+                type: "FixedViewIndependentToken"
+                args: None
+            # independent_token:
+            #     type: "NeuRayIndependentToken"
+            #     args:
+            #         n_points_per_ray: 64 # same as renderer.n_coarse
+            attn_layers:
+                IBRAttn: True           ## default: False // Note: customized IBRAttn tends to decrease the loss faster than built-in, but large memory consumption with customized transformer. built-in Pytorch is efficient.
+                n_layers: 3             ## default: 3, num encoder layers from Transformer
+                n_heads: 4
+                readout_token:
+                    type: "fixed"       # default: fixed,  fixed | data | neuray
+            probing_layer:
+
+            dropout_views_rate: 0       # set 0 for disable and for knowledge-distillation
+            dropout_multiviewhead: false # enforce encoder of multiviews to be dropped out, and keep the 1st encoder index not to be affected, so that to simulate different camera configurations with a varying number of input images during training. However, we want at least the first image to be consistently be present in the training. So no dropout for the first image. Dropout does not affect the single view head. 
+
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+
+    # mlp_coarse:
+    #     type : "resnet"
+    #     n_blocks : 0
+    #     d_hidden : 64
+
+    # mlp_fine:
+    #     type : "empty"
+    #     n_blocks : 1
+    #     d_hidden : 128
+
+    z_near: 3
+    z_far: 80
+    ray_batch_size: 256
+    inv_z: true
+
+    learn_empty: false      ##
+    code_mode: z
+
+    n_frames_encoder: 1
+    n_frames_render: 1
+
+renderer:
+    n_coarse : 64
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.00
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true

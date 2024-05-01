@@ -1,0 +1,14 @@
+defaults:                       ### This code is to run for slurm config
+    - exp_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "NoFisheyeEncoding"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+
+resume_from: "/usr/wiss/muhled/storage/user/outputs/mvbts/kitti-360/NoFisheyeEncoding_backend-None-1_20231025-114157/training_checkpoint_86000.pt"
+new_model_architecture: true
+
+model_conf:
+    encoding_style: "stereo"

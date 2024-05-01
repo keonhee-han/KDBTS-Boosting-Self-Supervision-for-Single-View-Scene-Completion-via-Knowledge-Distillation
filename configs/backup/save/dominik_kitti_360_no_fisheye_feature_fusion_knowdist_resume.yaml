@@ -1,0 +1,57 @@
+defaults:                       ### This code is to run for slurm config
+    - dominik_kitti_360_base
+    - _self_
+
+#### Simply comment one of them for usage. (Because we want the same configuration as the model was trained last time.)
+
+## For training
+name: "BaseExperimentNoFisheyeFeatureFusionLargeKnowDistResume" 
+
+resume_from: /storage/user/muhled/outputs/mvbts/kitti-360/BaseExperimentNoFisheyeFeatureFusionLarge_backend-None-1_20231107-105543/training_checkpoint_200000.pt
+new_model_architecture: false
+
+model_conf:
+    encoder:
+        type: "monodepth2"
+        freeze: true            # freezing encoder to train the transformer
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64               # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: true
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+    final_prediction_head: multiviewhead3
+    encoding_style: "stereo" 
+
+loss:
+    criterion: "l1+ssim"                # option: "l1+ssim+geo+cls"
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 0.001 # default: 0.001
+    lambda_pseudo_ground_truth: 1.0
+    pseudo_ground_truth_density: true
+    pseudo_ground_truth_teacher: "multiviewhead3"
+    pseudo_ground_truth_students:
+        - "singleviewhead"

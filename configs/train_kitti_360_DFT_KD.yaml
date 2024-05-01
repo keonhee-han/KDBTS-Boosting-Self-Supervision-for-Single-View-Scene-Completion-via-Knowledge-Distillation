@@ -1,0 +1,134 @@
+defaults:                       
+    - default
+    - data: kitti_360
+    - _self_
+
+name: "KDDFT_tempOffsetFeStereo"        ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+model: "bts"                            # model: "bts"/ "bts_overfit"    
+output_path: "out/mvbts/kitti_360/DFT/KD/"
+
+
+num_epochs: 200
+validate_every: 100000                      # default: 50000    , Note: This validation process takes around 6 hours for nvidia RTX A40 48GB
+visualize_every: 10000                      # default: 5000     , Note: Bigger validation steps would make the training faster without triggering the validation process.
+batch_size: 4                               # default: 1    
+
+save_best:
+    metric: abs_rel                         # The model that has the smallest absolute relative error will be saved.
+    sign: -1                                # The sign is negative, meaning that the model with the smallest abs_rel is the best
+
+## Training model with knowledge distillation from the pretrained DFT model
+# resume_from: "out/mvbts/kitti_360/DFT/*.pt"
+
+data:
+    data_fc: 2                              ## frame count default: 2 : 4*2 = 8 views | 3 for monocular camera
+    image_size: [192, 640]
+    color_aug: true
+    is_preprocessed: true
+    fisheye_rotation: [0, -15]
+
+    ## This is for training inference viz for different training view cases: F, S, FS in BTS paper. No need to change for normal training
+    data_fisheye: true
+    data_stereo: true                       ## false for loading only left
+
+renderer:
+    n_coarse : 64                           # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 32768 
+
+model_conf:
+    arch: "MVBTSNet"                        # constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 3                       # number of multi encoded views to aggregate. Possible view numbers: ~(fc*4). Default: 2, Note: cams are render loss
+    use_viewdirs: false                     # use with Neuray to aggregate multi-views, set true. c.f. IBRNet, PixelNeRF
+
+
+    encoder:
+        type: "monodepth2"
+        freeze: true                        # freezing en- and decoder network to verify if training the transformer model (DFT) works     // by unfreezing, to train the en- and decoder
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64                           # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+        
+    code:
+        num_freqs: 6                    
+        freq_factor: 1.5
+        include_input: true
+
+    decoder_heads:
+        - type: "MultiViewHead"
+          name: "multiviewhead"
+          freeze: true                      # True For knowledge-distillation learning for singleview head
+          args:
+            embedding_encoder:
+                type: "pwf"                 ## set embedding type as string: pwf | ff | hpwf : PoswiseFF_emb4enc | FeedForward | FeedForward_half| hardcoded_PoswiseFF_emb4enc . Note: shrink the size of sequence of dimension of token (for model's complexity reason)
+                d_out: 32                   ## default: 16 | 32 | 103 | 115 : 8 | 121 : 9. input dimension of encoder layer of the Transformer
+            independent_token:
+                type: "FixedViewIndependentToken"
+                args: None
+            # independent_token:            ## For experimental purpose
+            #     type: "NeuRayIndependentToken"
+            #     args:
+            #         n_points_per_ray: 64 # same as renderer.n_coarse
+            attn_layers:
+                IBRAttn: false              ## default: False // Note: customized IBRAttn tends faster to converge than the built-in, whereas bult-in takes less memory and custom takes large memory consumption with customized transformer. built-in Pytorch is efficient.
+                n_layers: 3                 ## default: 3, num encoder layers from Transformer
+                n_heads: 4
+                readout_token:
+                    type: "fixed"           # default: fixed,  fixed | data | neuray
+            probing_layer:
+
+            dropout_views_rate: 0           # set 0 for disable and for knowledge-distillation
+            dropout_multiviewhead: false    # enforce encoder of multiviews to be dropped out, and keep the 1st encoder index not to be affected, so that to simulate different camera configurations with a varying number of input images during training. However, we want at least the first image to be consistently be present in the training. So no dropout for the first image. Dropout does not affect the single view head. 
+
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0                  # which encoder id we want to extract among feature maps
+            d_hidden : 64
+
+    final_prediction_head: "singleviewhead" ## default: multiviewhead (giving all assinged input views) | singleviewhead (only [0] index input scene - buttom left in frame arrangement) for knowledge-dstillation.
+
+    encoding_style: "stereo"                # random | default | stereo : execlusively load stereo for input features map. Note: Current kitti-360 fisheye's intrinsic is poorly setup, better to turn it false to prevent the model training from the detrimental result for density field reconstruction. random: randomly sampling feature maps during training fisheye during training. BTS uses only mono as sampling. default: encoding indices include num multiview in order.
+    ids_enc_offset_viz: [0]                 # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or set "false" if you want to sample randomly (c.f. fisheye_offset)
+
+    z_near: 3                               # default: 3(m)
+    z_far: 80                               # default: 80(m)
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                      # num frame to render among given cameras at a frame: 4 x 2 => v==8
+    frame_sample_mode: kitti360-mono        # defaut: kitti360-mono | mono | stereo | only (for single image without temporal steps). Note: Make sure data_fisheye, data_stereo is set up accordingly.
+
+    sample_mode: patch                      # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                           # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                    # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true                 # data augmentation
+
+    learn_empty: false
+    code_mode: z                            # default: z, z | distance | z_feat: additional cam_feature_map_positional_encoding, Note: z_feat is unverified
+
+loss:
+    criterion: "l1+ssim"                    # photometric reconstruction loss
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 1e-3      # default: 1e-3 == 0.001
+    lambda_pseudo_ground_truth: 5e-2        # default: 5e-2, set 0 to disable. Note: This should be trained once the multiview head is trained enough to knowledge distillation for singleview head
+    pseudo_ground_truth_teacher: "multiviewhead"
+    pseudo_ground_truth_students:
+        - "singleviewhead"                  ## making list type with an string element contained
+
+learning_rate: 5e-5                         # default: 1e-5 for fine-tuning. Note: 1e-4 for original BTS training from scratch, and last 20% is trained with 1e-5 c.f. BTS paper
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1
