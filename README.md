@@ -24,9 +24,15 @@ If you find our work useful, please consider citing our paper:
  }
 ```
 
-<!-- Video -->
-<!-- https://user-images.githubusercontent.com/16351108/225641019-3d864d40-bf21-41bf-82cf-896dacba3fb9.mp4 -->
+Occupancy Preidction in KITTI with baseline comparison
+<video width="100%" autoplay muted loop>
+  <source src="./assets/[kdbts_demo_small_size.mp4](https://github.com/keonhee-han/keonhee-han.github.io/blob/main/_publications/kdbts/assets/kdbts_demo_small_size.mp4)" type="video/mp4">
+Your browser does not support the video tag.
+</video>
+
+<!--
 [![Baseline_comparison](https://github.com/keonhee-han/keonhee-han.github.io/blob/main/_publications/kdbts/assets/thumbnail_kdbts_maxresdefault.png)](https://youtu.be/vNtLwpp_LlA?si=ghPzzDMIS5QnzphA)
+-->
 
 # 📋 Abstract 
 Inferring scene geometry from images via Structure from Motion is a long-standing and fundamental problem in computer vision. While classical approaches and, more recently, depth map predictions only focus on the visible parts of a scene, the task of scene completion aims to reason about geometry even in occluded regions. With the popularity of <cite>[neural radiance fields (NeRFs)][1]</cite>, implicit representations also became popular for scene completion by predicting so-called density fields. Unlike explicit approaches e.g. voxel-based methods, density fields also allow for accurate depth prediction and novel-view synthesis via image based rendering. In this work, we propose to fuse the scene reconstruction from multiple images and distill this knowledge into a more accurate single-view scene reconstruction. To this end, we propose Multi-View Behind the Scenes(MVBTS) to fuse density fields from multiple posed images, trained fully self-supervised only from image data. Using knowledge distillation, we use MVBTS to train a single view scene completion network via direct supervision called KDBTS. It achieves state-of-the-art performance on occupancy prediction, especially in occluded regions.
