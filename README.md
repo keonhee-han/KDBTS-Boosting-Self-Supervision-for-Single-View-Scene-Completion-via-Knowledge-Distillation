@@ -1,4 +1,4 @@
-# KDBTS: Boosting Self-Supervised Learning for Single-View Scene Completion via Knowledge Distillation
+# KDBTS: Boosting Self-Supervision for Single-View Scene Completion via Knowledge Distillation
 
 [**Paper**](https://arxiv.org/abs/2404.07933) |  [**Video**](https://www.youtube.com/watch?v=_qjwLooM8gc) | [**Project Page**](https://keonhee-han.github.io/publications/kdbts/)
 This is the official implementation for the CVPR 2024 paper:
