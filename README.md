@@ -3,7 +3,7 @@
 [**Paper**](https://arxiv.org/abs/2404.07933) |  [**Video**](https://www.youtube.com/watch?v=_qjwLooM8gc) | [**Project Page**](https://keonhee-han.github.io/publications/kdbts/)
 This is the official implementation for the CVPR 2024 paper:
 
-> **KDBTS: Boosting Self-Supervised Learning for Single-View Scene Completion via Knowledge Distillation**
+> **KDBTS: Boosting Self-Supervision for Single-View Scene Completion via Knowledge Distillation**
 >
 > [Keonhee Han](https://keonhee-han.github.io)<sup>1</sup>, [Dominik Muhle](https://dominikmuhle.github.io)<sup>1,2</sup>, [Felix Wimbauer](https://fwmb.github.io)<sup>1,2</sup>, and [Daniel Cremers](https://vision.in.tum.de/members/cremers)<sup>1,2</sup><br>
 > <sup>1</sup>Technical University of Munich, <sup>2</sup>Munich Center for Machine Learning 
