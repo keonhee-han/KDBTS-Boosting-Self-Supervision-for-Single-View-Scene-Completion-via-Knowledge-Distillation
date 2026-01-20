@@ -1,0 +1,122 @@
+defaults:                      
+    - default
+    - data: kitti_raw
+    - _self_
+
+## For training
+name: "BaseExperimentRaw"     ## Please name it in case there are various hparam settings to distinguish the diff results easily.
+model: "bts"
+output_path: "outputs/mvbts/kitti-raw"
+
+num_epochs: 50
+validate_every: 50000
+visualize_every: 10000                  # default: 10       ## bigger is good for computational reduction
+batch_size: 8                           # default: 16       ## Note: size 1 is working properly with NueRay integration. The complete integration needs to be done with super-batch size in training loop. ## each batch contains 8 views 16*8 too much
+# stop_iteration: 150020
+
+
+save_best:
+    metric: abs_rel                     # The model that has the smallest absolute relative error will be saved.
+    sign: -1                            # The sign is negative, meaning that the model with the smallest abs_rel is the best
+
+
+data:
+    data_fc: 2
+    image_size: [192, 640]
+    color_aug: true
+    is_preprocessed: true
+    fisheye_rotation: [0, -15]
+
+
+renderer:
+    n_coarse : 64                       # default: 64, num sampling on a ray
+    n_fine : 0
+    n_fine_depth : 0
+    depth_std : 1.0
+    sched : []
+    white_bkgd : false
+    lindisp: true
+    hard_alpha_cap: true
+    eval_batch_size: 65536
+
+model_conf:
+    arch: "MVBTSNet"                    # constructor for class MVBTSNet(torch.nn.Module):
+    use_code: true
+    prediction_mode: default
+    num_multiviews: 3         
+    use_viewdirs: false                 # to aggregate multi-views, set true.
+
+    encoder:
+        type: "monodepth2"
+        freeze: false                   # freezing encoder to train MVBTS
+        pretrained: true
+        resnet_layers: 50
+        num_ch_dec: [32,32,64,128,256]
+        d_out: 64                       # c.f. paper D.1. output channel dimension 64 as hparam for the best result
+
+    code:
+        num_freqs: 6
+        freq_factor: 1.5
+        include_input: true
+
+    decoder_heads:
+        - type: "MultiViewHead3"
+          name: "multiviewhead3"
+          freeze: false
+          args:
+            mlp:
+                type: "resnet"
+                args:
+                    n_blocks: 0
+                    d_hidden: 128
+            mlp2:
+                type: "resnet"
+                d_in: 16
+                args:
+                    n_blocks: 0
+                    d_hidden: 16
+            dropout_views_rate: 0.5
+            dropout_multiviewhead: true
+
+        - type: "resnet"
+          name: "singleviewhead"
+          args:
+            n_blocks : 0
+            view_number: 0              # which encoder id we want to extract among feature maps
+            d_hidden : 64
+    final_prediction_head: multiviewhead3
+
+    encoding_style: "random"            # sampling fisheye during training. BTS uses only mono as sampling. default: false
+    ids_enc_offset_viz: [0]             # which cam to choose for inference of viz_eval. e.g. [0, 1 ...] or None if you want to sample randomly (c.f. fisheye_offset)
+
+    z_near: 3
+    z_far: 80                           # default: 80m
+    inv_z: true
+
+    n_frames_encoder: 1
+    n_frames_render: 2                  # num frame to render among v==8
+    frame_sample_mode: default
+
+    sample_mode: patch                  # e.g. a ray_batch_size of 4096, we sample 4096/64=64 patches.
+    patch_size: 8                       # => 64 patches * (8 * 8) pixels / patch * 1 ray / pixel * 64 points / ray = 262144 points in the space in a single batch entry to be evaluated
+    ray_batch_size: 2048                # default: 2048, 2048 in BTS paper #_sampled points in an array from one single view. Note: assert ray_batch_size % (self.patch_size_x * self.patch_size_y)
+    flip_augmentation: true             # data augmentation
+
+    learn_empty: false
+    code_mode: z
+
+loss:
+    criterion: "l1+ssim"                # option: "l1+ssim"
+    invalid_policy: weight_guided
+    lambda_edge_aware_smoothness: 0.001 # default: 0.001
+    lambda_pseudo_ground_truth: 0.0
+    pseudo_ground_truth_teacher: "multiviewhead"
+    pseudo_ground_truth_students:
+        - "singleviewhead"
+
+learning_rate: 1e-4                     # default: 1e-4
+
+scheduler:
+    type: step
+    step_size: 120000
+    gamma: 0.1
